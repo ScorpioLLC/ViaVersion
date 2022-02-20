@@ -82,8 +82,9 @@ public class BaseProtocol extends AbstractProtocol {
                         pipeline.add(protocols);
 
                         // Set the original snapshot version if present
-                        ProtocolVersion protocol = ProtocolVersion.getProtocol(serverProtocol);
-                        wrapper.set(Type.VAR_INT, 0, protocol.getOriginalVersion());
+                        // Scorpio Start - Use the players version, our spigot handles handshakes and their versions
+                        wrapper.set(Type.VAR_INT, 0, info.getProtocolVersion());
+                        // Scorpio End
                     }
 
                     // Add Base Protocol
