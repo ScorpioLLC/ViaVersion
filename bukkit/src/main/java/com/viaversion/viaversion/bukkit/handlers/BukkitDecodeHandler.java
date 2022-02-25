@@ -26,12 +26,14 @@ import com.viaversion.viaversion.exception.CancelDecoderException;
 import com.viaversion.viaversion.exception.InformativeException;
 import com.viaversion.viaversion.util.PipelineUtil;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.MessageToMessageDecoder;
 
 import java.util.List;
 
-public class BukkitDecodeHandler extends ByteToMessageDecoder {
+@ChannelHandler.Sharable
+public class BukkitDecodeHandler extends MessageToMessageDecoder<ByteBuf> {
     private final UserConnection info;
 
     public BukkitDecodeHandler(UserConnection info) {
