@@ -24,63 +24,23 @@ import com.viaversion.viaversion.bukkit.util.NMSUtil;
 import com.viaversion.viaversion.exception.CancelCodecException;
 import com.viaversion.viaversion.exception.CancelEncoderException;
 import com.viaversion.viaversion.exception.InformativeException;
-import com.viaversion.viaversion.handlers.ChannelHandlerContextWrapper;
 import com.viaversion.viaversion.handlers.ViaCodecHandler;
 import com.viaversion.viaversion.util.PipelineUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-
-public class BukkitEncodeHandler extends MessageToByteEncoder implements ViaCodecHandler {
-    private static Field versionField;
-
-    static {
-        try {
-            // Attempt to get any version info from the handler
-            versionField = NMSUtil.nms(
-                    "PacketEncoder",
-                    "net.minecraft.network.PacketEncoder"
-            ).getDeclaredField("version");
-
-            versionField.setAccessible(true);
-        } catch (Exception e) {
-            // Not compat version
-        }
-    }
-
+public class BukkitEncodeHandler extends MessageToByteEncoder<ByteBuf> implements ViaCodecHandler {
     private final UserConnection info;
-    private final MessageToByteEncoder minecraftEncoder;
 
-    public BukkitEncodeHandler(UserConnection info, MessageToByteEncoder minecraftEncoder) {
+    public BukkitEncodeHandler(UserConnection info) {
         this.info = info;
-        this.minecraftEncoder = minecraftEncoder;
     }
 
     @Override
-    protected void encode(final ChannelHandlerContext ctx, Object o, final ByteBuf bytebuf) throws Exception {
-        if (versionField != null) {
-            versionField.set(minecraftEncoder, versionField.get(this));
-        }
-        // handle the packet type
-        if (!(o instanceof ByteBuf)) {
-            // call minecraft encoder
-            try {
-                PipelineUtil.callEncode(this.minecraftEncoder, new ChannelHandlerContextWrapper(ctx, this), o, bytebuf);
-            } catch (InvocationTargetException e) {
-                if (e.getCause() instanceof Exception) {
-                    throw (Exception) e.getCause();
-                } else if (e.getCause() instanceof Error) {
-                    throw (Error) e.getCause();
-                }
-            }
-
-        } else {
-            bytebuf.writeBytes((ByteBuf) o);
-        }
-        transform(bytebuf);
+    protected void encode(final ChannelHandlerContext ctx, ByteBuf input, final ByteBuf output) throws Exception {
+        output.writeBytes(input);
+        transform(output);
     }
 
     @Override
