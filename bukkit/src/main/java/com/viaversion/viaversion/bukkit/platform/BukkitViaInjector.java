@@ -112,10 +112,9 @@ public class BukkitViaInjector extends LegacyViaInjector {
         throw new RuntimeException("Failed to get server");
     }
 
-    //TODO Look into whether this is still necessary.
     @Override
     public String getDecoderName() {
-        return protocolLib ? "protocol_lib_decoder" : "via_decoder";
+        return protocolLib ? "protocol_lib_decoder" : "decoder";
     }
 
     @Override

@@ -26,12 +26,13 @@ import com.viaversion.viaversion.platform.WrappedChannelInitializer;
 import com.viaversion.viaversion.protocol.ProtocolPipelineImpl;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
+import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.MessageToByteEncoder;
 
 import java.lang.reflect.Method;
 
 public class BukkitChannelInitializer extends ChannelInitializer<Channel> implements WrappedChannelInitializer {
-    private static final String VIA_DECODER = "via-decodr";
-    private static final String VIA_ENCODER = "via-encoder";
+
     private static final Method INIT_CHANNEL_METHOD;
     private final ChannelInitializer<Channel> original;
 
@@ -69,10 +70,12 @@ public class BukkitChannelInitializer extends ChannelInitializer<Channel> implem
         }
 
         // Add our transformers
-        //TODO Handle compression relocation stuff like in other injectors
         HandlerConstructor constructor = ClassGenerator.getConstructor();
-        channel.pipeline().addBefore("encoder", VIA_ENCODER, constructor.newEncodeHandler(connection));
-        channel.pipeline().addBefore("decoder", VIA_DECODER, constructor.newDecodeHandler(connection));
+        MessageToByteEncoder encoder = constructor.newEncodeHandler(connection, (MessageToByteEncoder) channel.pipeline().get("encoder"));
+        ByteToMessageDecoder decoder = constructor.newDecodeHandler(connection, (ByteToMessageDecoder) channel.pipeline().get("decoder"));
+
+        channel.pipeline().replace("encoder", "encoder", encoder);
+        channel.pipeline().replace("decoder", "decoder", decoder);
     }
 
     @Override

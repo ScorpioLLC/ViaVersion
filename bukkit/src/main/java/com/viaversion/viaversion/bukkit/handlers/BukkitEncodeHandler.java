@@ -24,37 +24,69 @@ import com.viaversion.viaversion.bukkit.util.NMSUtil;
 import com.viaversion.viaversion.exception.CancelCodecException;
 import com.viaversion.viaversion.exception.CancelEncoderException;
 import com.viaversion.viaversion.exception.InformativeException;
+import com.viaversion.viaversion.handlers.ChannelHandlerContextWrapper;
 import com.viaversion.viaversion.handlers.ViaCodecHandler;
 import com.viaversion.viaversion.util.PipelineUtil;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-import io.netty.handler.codec.MessageToMessageDecoder;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 
-public class BukkitEncodeHandler extends MessageToByteEncoder<ByteBuf> implements ViaCodecHandler {
+public class BukkitEncodeHandler extends MessageToByteEncoder implements ViaCodecHandler {
+    private static Field versionField;
+
+    static {
+        try {
+            // Attempt to get any version info from the handler
+            versionField = NMSUtil.nms(
+                    "PacketEncoder",
+                    "net.minecraft.network.PacketEncoder"
+            ).getDeclaredField("version");
+
+            versionField.setAccessible(true);
+        } catch (Exception e) {
+            // Not compat version
+        }
+    }
+
     private final UserConnection info;
-    private boolean handledCompression;
-    public BukkitEncodeHandler(UserConnection info) {
+    private final MessageToByteEncoder minecraftEncoder;
+
+    public BukkitEncodeHandler(UserConnection info, MessageToByteEncoder minecraftEncoder) {
         this.info = info;
+        this.minecraftEncoder = minecraftEncoder;
     }
 
     @Override
-    protected void encode(final ChannelHandlerContext ctx, ByteBuf input, final ByteBuf output) throws Exception {
-        output.writeBytes(input);
-        if (!info.checkClientboundPacket()) throw CancelEncoderException.generate(null);
-        if (!info.shouldTransformPacket()) return;
-        boolean needsCompression = handleCompressionOrder(ctx, output);
-        transform(output);
-        if (needsCompression) {
-            recompress(ctx, output);
+    protected void encode(final ChannelHandlerContext ctx, Object o, final ByteBuf bytebuf) throws Exception {
+        if (versionField != null) {
+            versionField.set(minecraftEncoder, versionField.get(this));
         }
+        // handle the packet type
+        if (!(o instanceof ByteBuf)) {
+            // call minecraft encoder
+            try {
+                PipelineUtil.callEncode(this.minecraftEncoder, new ChannelHandlerContextWrapper(ctx, this), o, bytebuf);
+            } catch (InvocationTargetException e) {
+                if (e.getCause() instanceof Exception) {
+                    throw (Exception) e.getCause();
+                } else if (e.getCause() instanceof Error) {
+                    throw (Error) e.getCause();
+                }
+            }
+
+        } else {
+            bytebuf.writeBytes((ByteBuf) o);
+        }
+        transform(bytebuf);
     }
 
     @Override
     public void transform(ByteBuf bytebuf) throws Exception {
+        if (!info.checkClientboundPacket()) throw CancelEncoderException.generate(null);
+        if (!info.shouldTransformPacket()) return;
         info.transformClientbound(bytebuf, CancelEncoderException::generate);
     }
 
@@ -67,40 +99,5 @@ public class BukkitEncodeHandler extends MessageToByteEncoder<ByteBuf> implement
                 && (info.getProtocolInfo().getState() != State.HANDSHAKE || Via.getManager().isDebug())) {
             cause.printStackTrace(); // Print if CB doesn't already do it
         }
-    }
-
-    private void recompress(ChannelHandlerContext ctx, ByteBuf buffer) throws InvocationTargetException {
-        ByteBuf temp = ctx.alloc().buffer().writeBytes(buffer);
-        buffer.clear();
-        PipelineUtil.callEncode((MessageToByteEncoder) ctx.pipeline().get("compress"),
-                ctx.pipeline().context("compress"), temp, buffer);
-    }
-
-    private boolean handleCompressionOrder(ChannelHandlerContext ctx, ByteBuf buffer) throws InvocationTargetException {
-        if (handledCompression) return false;
-
-        int encoderIndex = ctx.pipeline().names().indexOf("compress");
-        if (encoderIndex == -1) return false;
-        handledCompression = true;
-        if (encoderIndex > ctx.pipeline().names().indexOf("via-encoder")) {
-            //This packet has been compressed, we need to decompress to process it.
-            ByteBuf decompressed = (ByteBuf) PipelineUtil.callDecode((MessageToMessageDecoder) ctx.pipeline().get("decompress"), ctx.pipeline().context("decompress"), buffer).get(0);
-            if (buffer != decompressed) {
-                try {
-                    buffer.clear().writeBytes(decompressed);
-                } finally {
-                    decompressed.release();
-                }
-            }
-            // Reorder the pipeline
-            ChannelHandler dec = ctx.pipeline().get("via-decoder");
-            ChannelHandler enc = ctx.pipeline().get("via-encoder");
-            ctx.pipeline().remove(dec);
-            ctx.pipeline().remove(enc);
-            ctx.pipeline().addAfter("decompress", "via-decoder", dec);
-            ctx.pipeline().addAfter("compress", "via-encoder", enc);
-            return true;
-        }
-        return false;
     }
 }

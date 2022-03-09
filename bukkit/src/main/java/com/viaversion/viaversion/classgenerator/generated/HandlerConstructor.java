@@ -22,7 +22,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.MessageToByteEncoder;
 
 public interface HandlerConstructor {
-    public MessageToByteEncoder newEncodeHandler(UserConnection info);
+    public MessageToByteEncoder newEncodeHandler(UserConnection info, MessageToByteEncoder minecraftEncoder);
 
-    public ByteToMessageDecoder newDecodeHandler(UserConnection info);
+    public ByteToMessageDecoder newDecodeHandler(UserConnection info, ByteToMessageDecoder minecraftDecoder);
 }
